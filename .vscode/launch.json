@@ -1,0 +1,67 @@
+{
+	// IntelliSense を使用して利用可能な属性を学べます。
+	// 既存の属性の説明をホバーして表示します。
+	// 詳細情報は次を確認してください: https://go.microsoft.com/fwlink/?linkid=830387
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"type": "lldb",
+			"request": "launch",
+			"name": "Debug unit tests in library 'chip8rs'",
+			"cargo": {
+				"args": [
+					"test",
+					"--no-run",
+					"--lib",
+					"--package=chip8rs"
+				],
+				"filter": {
+					"name": "chip8rs",
+					"kind": "lib"
+				}
+			},
+			"args": [],
+			"cwd": "${workspaceFolder}"
+		},
+		{
+			"type": "lldb",
+			"request": "launch",
+			"name": "Debug executable 'chip8rs'",
+			"cargo": {
+				"args": [
+					"build",
+					"--bin=chip8rs",
+					"--package=chip8rs"
+				],
+				"filter": {
+					"name": "chip8rs",
+					"kind": "bin"
+				}
+			},
+			"args": [
+				"roms/PONG",
+				"64"
+			],
+			"cwd": "${workspaceFolder}"
+		},
+		{
+			"type": "lldb",
+			"request": "launch",
+			"name": "Debug unit tests in executable 'chip8rs'",
+			"cargo": {
+				"args": [
+					"test",
+					"--no-run",
+					"--bin=chip8rs",
+					"--package=chip8rs"
+				],
+				"filter": {
+					"name": "chip8rs",
+					"kind": "bin"
+				}
+			},
+			"args": [],
+			"cwd": "${workspaceFolder}"
+		}
+	]
+}

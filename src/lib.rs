@@ -5,15 +5,7 @@ mod timer;
 pub use cpu::Cpu;
 pub use ram::Ram;
 
-use std::convert::From;
-use std::io::Read;
-use std::sync::atomic::{AtomicU8, Ordering};
-use std::sync::{mpsc, Arc};
-use std::thread::sleep;
-use std::time::{Duration, Instant};
-
-use log::*;
-use rand::prelude::*;
+use std::sync::mpsc;
 
 pub struct Chip8 {
 	cpu: Cpu,

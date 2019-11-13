@@ -1,5 +1,6 @@
-use chip8rs::{Chip8, Cpu, Display, Key, Ram};
+use chip8rs::{Chip8, Display};
 use env_logger;
+use log::*;
 use std::{
 	env,
 	io::{stdin, stdout, Write},
@@ -7,14 +8,8 @@ use std::{
 	thread::sleep,
 	time::{Duration, Instant},
 };
-// use termion::event::Key;
-use log::*;
-use termion::{
-	input::TermRead,
-	raw::{IntoRawMode, RawTerminal},
-};
-
-static PIXEL: char = ' ';
+use termion::event::Key;
+use termion::{input::TermRead, raw::IntoRawMode};
 
 const WIDTH: usize = 64;
 
@@ -46,22 +41,18 @@ enum Filler {
 }
 
 struct Console {
-	keyboard: mpsc::Sender<Key>,
+	keyboard: mpsc::Sender<chip8rs::Key>,
 	curr: [[u8; HEIGHT]; WIDTH],
 }
 
 impl Console {
-	fn new(keyboard: mpsc::Sender<Key>) -> Self {
+	fn new(keyboard: mpsc::Sender<chip8rs::Key>) -> Self {
 		let console = Console {
 			keyboard,
 			curr: [[0; HEIGHT]; WIDTH],
 		};
 		console.clear();
 		console
-	}
-
-	fn peek_keyevent(&self) -> Option<()> {
-		None
 	}
 
 	fn draw(&mut self, x: u8, y: u8, data: Vec<u8>) -> Result<u8, ()> {
@@ -89,7 +80,6 @@ impl Console {
 						panic!("Illegal bit value: cb={}, nb={}", cb, nb);
 					}
 				}
-				// self.curr[x + ix][y + iy] ^= nb;
 			}
 		}
 
@@ -103,30 +93,31 @@ impl Console {
 			Filler::Fill => self.curr[x][y] = 1,
 			Filler::Unfill => self.curr[x][y] = 0,
 		}
-		// match fill {
-		// 	Filler::Fill => write!(
-		// 		stdout,
-		// 		"{}{}",
-		// 		termion::cursor::Goto(x as u16, y as u16),
-		// 		" "
-		// 	),
-		// 	Filler::Unfill => write!(
-		// 		stdout,
-		// 		"{}{}",
-		// 		termion::cursor::Goto(x as u16, y as u16),
-		// 		termion::color::Fg(termion::color::White)
-		// 	),
-		// }
-		// .unwrap();
+		match fill {
+			Filler::Fill => write!(
+				stdout,
+				"{}{}",
+				termion::cursor::Goto(x as u16 + 1, y as u16 + 1),
+				"■"
+			)
+			.unwrap(),
+			Filler::Unfill => write!(
+				stdout,
+				"{}{}",
+				termion::cursor::Goto(x as u16 + 1, y as u16 + 1),
+				" "
+			)
+			.unwrap(),
+		}
+		stdout.flush().unwrap();
 	}
 
 	fn flush(&mut self) {
 		let mut stdout = stdout().into_raw_mode().unwrap();
 		write!(
 			stdout,
-			"{}{}{}",
+			"{}{}",
 			termion::cursor::Hide,
-			termion::clear::All,
 			termion::cursor::Goto(1, 1),
 		)
 		.unwrap();
@@ -135,27 +126,12 @@ impl Console {
 		for y in 0..HEIGHT {
 			for x in 0..WIDTH {
 				if self.curr[x][y] == 0 {
-					write!(
-						stdout,
-						"{}{}",
-						termion::cursor::Hide,
-						termion::cursor::Goto(x as u16 + 1, y as u16 + 1),
-						// termion::color::Bg(termion::color::Black)
-					)
-					.unwrap();
-					print!(" ")
+					write!(stdout, " ").unwrap();
 				} else {
-					write!(
-						stdout,
-						"{}{}",
-						termion::cursor::Hide,
-						termion::cursor::Goto(x as u16 + 1, y as u16 + 1),
-						// termion::color::Bg(termion::color::White)
-					)
-					.unwrap();
-					print!("■");
+					write!(stdout, "■").unwrap();
 				}
 			}
+			write!(stdout, "\n\r").unwrap();
 		}
 		stdout.flush().unwrap();
 	}
@@ -184,36 +160,53 @@ fn emuloop(mut chip8: Chip8, console: Arc<Mutex<Console>>, args: Vec<String>) ->
 	println!("{:?}", args);
 
 	let frame = Duration::from_millis((1000 / args[2].parse::<u64>().unwrap()) as u64);
-	loop {
-		let now = Instant::now();
-
-		chip8.tick();
-		match console.lock() {
-			Ok(mut c) => {
-				loop {
-					if c.peek_keyevent().is_none() {
-						break;
+	let console2 = console.clone();
+	std::thread::spawn(move || loop {
+		let mut stdout = stdout().into_raw_mode().unwrap();
+		stdout.flush().unwrap();
+		let stdin = stdin();
+		for c in stdin.keys() {
+			match c.unwrap() {
+				Key::Esc => std::process::exit(0),
+				Key::Char(c) => match console2.lock() {
+					Ok(con) => {
+						let k = chip8rs::Key::from(c);
+						if k.0 != 0x99 {
+							debug!("sending key {:?}", c);
+							con.keyboard
+								.send(k)
+								.map_err(|e| error!("Keyboard error: {}", e))
+								.unwrap();
+						}
 					}
-				}
-				c.flush();
-			}
-			Err(e) => {
-				error!("Unable to unlock Console: {}", e);
+					Err(e) => error!("{}", e),
+				},
+				_ => {}
 			}
 		}
-
+	});
+	match console.lock() {
+		Ok(mut c) => {
+			c.flush();
+		}
+		Err(e) => {
+			error!("Unable to unlock Console: {}", e);
+		}
+	}
+	loop {
+		let now = Instant::now();
+		chip8.tick();
 		if let Some(remaining) = frame.checked_sub(now.elapsed()) {
 			sleep(remaining)
 		}
 	}
 }
 fn run(args: Vec<String>) -> Result<(), ()> {
-	let (itx, irx) = mpsc::channel::<Key>();
+	let (itx, irx) = mpsc::channel::<chip8rs::Key>();
 	let console = Arc::new(Mutex::new(Console::new(itx)));
 	let adaptor = DisplayAdaptor::new(console.clone());
 
 	let mut chip8 = Chip8::new(Box::new(adaptor), irx);
-	println!("{}", args.len());
 	let file = std::fs::File::open(&args[1]).unwrap();
 
 	match chip8.ram.load(file) {

@@ -1,4 +1,3 @@
-use log::debug;
 use std::io::Read;
 #[derive(Debug)]
 pub struct Error(pub String);

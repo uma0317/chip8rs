@@ -1,9 +1,4 @@
-use std::convert::From;
-use std::io::Read;
-use std::sync::atomic::{AtomicU8, Ordering};
-use std::sync::{mpsc, Arc};
-use std::thread::sleep;
-use std::time::{Duration, Instant};
+use std::sync::mpsc;
 
 use log::*;
 use rand::prelude::*;
@@ -43,16 +38,21 @@ impl Cpu {
 		}
 	}
 
-	fn draw(&self, dsp: &mut Box<Display>, x: u8, y: u8, data: Vec<u8>) -> Result<u8, ()> {
+	fn draw(&self, dsp: &mut Box<dyn Display>, x: u8, y: u8, data: Vec<u8>) -> Result<u8, ()> {
 		dsp.draw(x, y, data)
 	}
 
-	fn clear(&self, dsp: &mut Box<Display>) -> Result<(), ()> {
+	fn clear(&self, dsp: &mut Box<dyn Display>) -> Result<(), ()> {
 		dsp.clear();
 		Ok(())
 	}
 
-	pub fn run(&mut self, ram: &mut Ram, dsp: &mut Box<Display>, inp: &mut mpsc::Receiver<Key>) {
+	pub fn run(
+		&mut self,
+		ram: &mut Ram,
+		dsp: &mut Box<dyn Display>,
+		inp: &mut mpsc::Receiver<Key>,
+	) {
 		loop {
 			if self.pc >= 0xFFF || (self.pc + 1) >= 0xFFF {
 				break;
@@ -62,7 +62,12 @@ impl Cpu {
 		}
 	}
 
-	pub fn tick(&mut self, ram: &mut Ram, io: &mut Box<Display>, inp: &mut mpsc::Receiver<Key>) {
+	pub fn tick(
+		&mut self,
+		ram: &mut Ram,
+		io: &mut Box<dyn Display>,
+		inp: &mut mpsc::Receiver<Key>,
+	) {
 		use Res::*;
 		let pc = self.pc as usize;
 		let o1: u8 = ram.buf[pc] >> 4;
@@ -343,11 +348,9 @@ impl Cpu {
 			}
 			_ => {
 				panic!("N/A {:x}{:x}{:x}{:x}", o1, o2, o3, o4);
-				Next
 			}
 		};
 
-		// Determine the next `pc`.
 		match res {
 			Next => {
 				self.pc += 2;
